@@ -53,10 +53,6 @@ def example_with_Microsoft_stock_price(ticker = 'MSFT'):
     """
         # Fetch historical stock data
     data = get_stock_data(ticker, '2019-01-01', '2025-09-01')
-    data = pd.read_csv(
-        f"E:\\Formations\\Africa Techup 2025\\projets\\Stock-price-forecasting-\\{ticker}_data.csv",
-        index_col=0
-    )
     #data.to_csv(f"{ticker}_data.csv", index=True)
     new_data = data.copy()
     new_data.reset_index(inplace=True)
