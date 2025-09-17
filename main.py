@@ -16,6 +16,8 @@ def get_stock_data(ticker, start_date, end_date):
     @param end_date: End date for fetching data (YYYY-MM-DD)
     @return: DataFrame containing historical stock data
     """
+    start_date = pd.to_datetime(start_date)
+    end_date = pd.to_datetime(end_date)
     data = yf.download(ticker, start=start_date, end=end_date)
     return data
 
@@ -48,18 +50,23 @@ ticker = 'MSFT'
 data = get_stock_data(ticker, '2019-01-01', '2025-09-01')
 data = pd.read_csv(
     f"E:\\Formations\\Africa Techup 2025\\projets\\Stock-price-forecasting-\\{ticker}_data.csv",
-    index_col=0, skiprows=2
+    index_col=0
 )
+
 data.to_csv(f"{ticker}_data.csv", index=True)
 new_data = data.copy()
 new_data.reset_index(inplace=True)
 new_data.columns = ['Date', 'Close', 'High', 'Low', 'Open', 'Volume']
+new_data['Date'] = pd.to_datetime(new_data['Date'])
+new_data.set_index('Date', inplace=True)
 print(new_data.head())
 print(new_data.columns)
 
 plot_stock_data(new_data, f"{ticker} Stock Price Data")
 data_scaled, scaler = preprocessing(new_data)
-print(data_scaled)
+new_data.info()
+
+
 
 
 
