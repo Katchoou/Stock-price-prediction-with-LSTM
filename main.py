@@ -5,12 +5,16 @@ import matplotlib.pyplot as plt
 from sklearn.preprocessing import MinMaxScaler
 import tensorflow as tf  
 import os
-from plotly.offline import iplot
+from plotly.offline import plot
 import plotly.graph_objs as go
+from tensorflow.keras.preprocessing.sequence import TimeseriesGenerator
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, LSTM
 
-# os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'  # Uncomment only if you need to disable oneDNN optimizations for troubleshooting
+# Set TensorFlow logging level to suppress detailed logs
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
-
+# os.environ['TF_ENABLE_ONEDNN_OPTS'] = '3'
 def get_stock_data(ticker, start_date, end_date):
     """
     This function is designed to fetch historical stock data
@@ -67,6 +71,104 @@ def normalise_data(data):
     scaled_data["Volume"] = scaler.fit_transform(data[["Volume"]])
     return scaled_data
 
+def plotting_with_plotly(data, title):
+    """
+    This function plots the stock data using plotly so that we can see the price movements
+    using candlestick charts
+    The color indicates whether the stock closed higher (green) or lower (red) than it opened
+    @param data: DataFrame containing stock data
+    @param title: The title prefered for the plot
+    """
+    trace = go.Ohlc(x=data.index, 
+                    open=data['Open'], 
+                    high=data['High'], 
+                    low=data['Low'], 
+                    close=data['Close'], 
+                    name='OHLC Charts of the price movements')
+    fig = go.Figure(data=[trace])
+    plot(fig)
+
+def moving_average(data, window_size=20):
+    """
+    This function calculates the moving average of the stock's closing price
+    @param data: DataFrame containing stock data
+    @param window_size: The window size for calculating the moving average (default is 50)
+    @return: Series containing the moving average
+    """
+    ma = data['Close'].rolling(window=window_size).mean()
+    plt.figure(figsize=(12, 6))
+    plt.plot(data["Close"], label='Closing Price', color = "red")
+    plt.plot(ma, label=f'{window_size}-Days Moving Average', color='blue')
+    plt.title(f'Plot of the Closing price and its {window_size}-Days Moving Average')
+    plt.legend()
+    plt.show()
+
+def data_train_test(data):
+    """
+    This function separates the data into training and testing sets
+    @param data: DataFrame containing stock data
+    @param train_size: Proportion of data to be used for training (default is 0.8)
+    @return: Training and testing datasets
+    """
+    Close = data[["Close"]]
+    train = Close[Close.index < '2022-01-01']
+    test = Close[Close.index >= '2022-01-01']
+    print(f"The shape of the training data is: {train.shape}")
+    print(f"The shape of the testing data is: {test.shape}")
+    return train, test
+
+def create_timeseries_generator(train, test, n_input=30):
+    """
+    This function creates a time series generator for the stock data
+    @param train: DataFrame containing the train stock data
+    @param test: DataFrame containing the test stock data
+    @return: TimeseriesGenerator object
+    """
+    train_array = train.values
+    test_array = test.values
+
+    train_gen = TimeseriesGenerator(train_array, 
+                                    train_array, 
+                                    length=n_input, 
+                                    batch_size=32, 
+                                    shuffle=False,
+                                    sampling_rate=1,
+                                    stride=1)
+
+    test_gen = TimeseriesGenerator(test_array, 
+                                   test_array,
+                                   length=n_input,
+                                   batch_size=32,
+                                   shuffle=False,
+                                   sampling_rate=1)
+    return train_gen, test_gen
+
+def lstm_model(n_neuron = 8, n_input=30):
+    n_features = 1
+    n_input = n_input
+    model = Sequential()
+    model.add(LSTM(n_neuron,  
+                   input_shape=(n_input, n_features))
+                   )
+    model.add(Dense(1))
+    model.compile(optimizer='adam', loss='mse')
+    return model
+
+def run_model(model, train_gen, epochs=200):
+    """
+    This function runs the LSTM model on the training and testing data
+    @param model: The LSTM model to be trained
+    @param train_gen: TimeseriesGenerator object for training data
+    @param epochs: Number of epochs to train the model (default is 50)
+    @return: History object containing training history
+    """
+    history = model.fit(train_gen, 
+                        epochs=epochs, 
+                        verbose=1)
+    return history
+
+
+
 def example_with_Microsoft_stock(ticker = 'MSFT'):
     """
     This function is an example of how to use the above functions with Microsoft stock data
@@ -75,20 +177,27 @@ def example_with_Microsoft_stock(ticker = 'MSFT'):
     data = get_stock_data(ticker, '2000-01-03', '2025-09-01')
     new_data = data.copy()
     new_data = transformed_data(new_data)
-    plot_stock_data(new_data, f"{ticker} Stock Price Data")
+    #plot_stock_data(new_data, f"{ticker} Stock Price Data")
     data_scaled = normalise_data(new_data)
-    print(type(data_scaled))
-    print(data_scaled.head())
-    return data_scaled
-
-
+    train, test = data_train_test(data_scaled)
+    train_gen, test_gen = create_timeseries_generator(train, test, n_input=30)
+    model = lstm_model(n_neuron=4, n_input=30)
+    history = run_model(model, train_gen, epochs=300)
+    #print(type(data_scaled))
+    #print(data_scaled.head())
+    return history
 
 if __name__ == "__main__":
     data = example_with_Microsoft_stock('MSFT')
-    data.describe()
-    print(f"The total number of null values per variable is:\n {data.isnull().sum()}")
-    print(f"The shape of the dataset is: {data.shape}")
-    print(f"The columns of the dataset are: {data.columns}")
+    #data.describe()
+    #print(f"The total number of null values per variable is:\n {data.isnull().sum()}")
+    #print(f"The shape of the dataset is: {data.shape}")
+    #print(f"The columns of the dataset are: {data.columns}")
+    #plotting_with_plotly(data, title="Microsoft Stock Price Data")
+    #moving_average(data, window_size=50)
+    history = example_with_Microsoft_stock('MSFT')
+    plt.plot(history.history['loss'], label='Training Loss')
+
 
 
 
