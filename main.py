@@ -27,6 +27,8 @@ def get_stock_data(ticker, start_date, end_date):
     end_date = pd.to_datetime(end_date)
     data = yf.Ticker(ticker)
     new_data = data.history(start=start_date, end=end_date)
+    if new_data.empty:
+        raise ValueError("No data found for the given ticker and date range.")
     return new_data
 
 def transformed_data(data):
@@ -69,9 +71,9 @@ def normalise_data(data):
     scaled_data["Low"] = scaler.fit_transform(data[["Low"]])
     scaled_data["Open"] = scaler.fit_transform(data[["Open"]])
     scaled_data["Volume"] = scaler.fit_transform(data[["Volume"]])
-    return scaled_data
+    return scaled_data, scaler
 
-def plotting_with_plotly(data, title):
+def plotting_with_plotly(data):
     """
     This function plots the stock data using plotly so that we can see the price movements
     using candlestick charts
@@ -178,25 +180,36 @@ def example_with_Microsoft_stock(ticker = 'MSFT'):
     new_data = data.copy()
     new_data = transformed_data(new_data)
     #plot_stock_data(new_data, f"{ticker} Stock Price Data")
-    data_scaled = normalise_data(new_data)
+    data_scaled, scaler = normalise_data(new_data)
     train, test = data_train_test(data_scaled)
     train_gen, test_gen = create_timeseries_generator(train, test, n_input=30)
     model = lstm_model(n_neuron=4, n_input=30)
-    history = run_model(model, train_gen, epochs=300)
+    history = run_model(model, train_gen, epochs=100)
     #print(type(data_scaled))
     #print(data_scaled.head())
-    return history
+    return history, model, test, test_gen, scaler
 
 if __name__ == "__main__":
-    data = example_with_Microsoft_stock('MSFT')
+    history, model, test, test_gen, scaler = example_with_Microsoft_stock('MSFT')
     #data.describe()
     #print(f"The total number of null values per variable is:\n {data.isnull().sum()}")
     #print(f"The shape of the dataset is: {data.shape}")
     #print(f"The columns of the dataset are: {data.columns}")
     #plotting_with_plotly(data, title="Microsoft Stock Price Data")
     #moving_average(data, window_size=50)
-    history = example_with_Microsoft_stock('MSFT')
-    plt.plot(history.history['loss'], label='Training Loss')
+    predictions = model.predict(test_gen)
+    test['Close'] = scaler.inverse_transform(test[['Close']])
+    test_predictions   = scaler.inverse_transform(predictions)
+    print(model.summary())
+    plt.figure(figsize=(14, 12))
+    plt.plot(test.index, test['Close'], label='Actual Price', color='blue')
+    plt.plot(test.index[30:], test_predictions, label='Predicted Price', color='red')
+    plt.title('Stock Price Predictions vs Actual Prices')
+    plt.xlabel('Date')
+    plt.ylabel('Price')
+    plt.legend()
+    plt.show()
+    plt.savefig('stock_price_predictions.png')
 
 
 
